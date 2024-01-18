@@ -1,7 +1,4 @@
-﻿using Amazon.EC2.Model;
-using System.Web.Mvc;
-using System.Web.Optimization;
-using Url_Shortener.App_Start;
+﻿using Url_Shortener.App_Start;
 
 namespace Url_Shortener
 {
@@ -9,7 +6,6 @@ namespace Url_Shortener
     {
         protected void Application_Start()
         {
-            // ... другие настройки ...
 
             AreaRegistration.RegisterAllAreas();
             FilterConfig.RegisterGlobalFilters(GlobalFilters.Filters);

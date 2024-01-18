@@ -1,96 +1,17 @@
-﻿using Microsoft.AspNet.Identity;
-using Microsoft.AspNet.Identity.Owin;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.Owin.Security;
-using System.Web.Mvc;
-using Url_Shortener.Models;
+﻿using Url_Shortener.Models;
 
 namespace Url_Shortener.Controllers
 {
+    [Authorize]
     public class AccountController : Controller
     {
-        private SignInManager<ApplicationUser, string> _signInManager;
+        private readonly SignInManager<ApplicationUser> _signInManager;
 
-        public AccountController()
-        {
-        }
-
-        [Authorize(Roles = "Admin")]
-        public class AdminController : Controller
-        {
-            public ActionResult AdminAction()
-            {
-                // Код доступный только для пользователей с ролью "Admin"
-                return View();
-            }
-        }
-        public class UserController : Controller
-        {
-            [Authorize(Roles = "OrdinaryUser")]
-            public ActionResult UserAction()
-            {
-                // Код доступный только для пользователей с ролью "OrdinaryUser"
-                return View();
-            }
-        }
-
-
-        public async Task<ActionResult> Register(RegisterViewModel model)
-        {
-            if (ModelState.IsValid)
-            {
-                var user = new ApplicationUser { UserName = model.Email, Email = model.Email };
-
-                var result = await UserManager.CreateAsync(user, model.Password);
-
-                if (result.Succeeded)
-                {
-                    await UserManager.AddToRoleAsync(user.Id, "OrdinaryUser");
-
-                    // Присвоение роли Admin, если условие выполняется (например, по email, логину и т. д.)
-                    if (model.Email == "admin@example.com")
-                    {
-                        await UserManager.AddToRoleAsync(user.Id, "Admin");
-                    }
-
-                    await SignInManager.SignInAsync(user, isPersistent: false, rememberBrowser: false);
-
-                    return RedirectToAction("Index", "Home");
-                }
-
-                AddErrors(result);
-            }
-
-            // Если что-то пошло не так, вернуть представление с ошибками
-            return View(model);
-        }
-
-        private void AddErrors(IdentityResult result)
-        {
-            foreach (var error in result.Errors)
-            {
-                ModelState.AddModelError("", error);
-            }
-        }
-
-        public AccountController(SignInManager<ApplicationUser, string> signInManager)
+        public AccountController(SignInManager<ApplicationUser> signInManager)
         {
             _signInManager = signInManager;
         }
 
-        public SignInManager<ApplicationUser, string> SignInManager
-        {
-            get
-            {
-                return _signInManager ?? HttpContext.GetOwinContext().Get<SignInManager<ApplicationUser, string>>();
-            }
-            private set
-            {
-                _signInManager = value;
-            }
-        }
-
-        // GET: /Account/Login
         [AllowAnonymous]
         public ActionResult Login(string returnUrl)
         {
@@ -98,7 +19,6 @@ namespace Url_Shortener.Controllers
             return View();
         }
 
-        // POST: /Account/Login
         [HttpPost]
         [AllowAnonymous]
         [ValidateAntiForgeryToken]
@@ -109,41 +29,90 @@ namespace Url_Shortener.Controllers
                 return View(model);
             }
 
-            var result = await SignInManager.PasswordSignInAsync(model.Login, model.Password, isPersistent: false, shouldLockout: false);
+            var result = await _signInManager.PasswordSignInAsync(model.Login, model.Password, false, false);
 
-            switch (result)
+            return result switch
             {
-                case SignInStatus.Success:
-                    return RedirectToLocal(returnUrl);
-                default:
-                    ModelState.AddModelError("", "Invalid login attempt.");
-                    return View(model);
-            }
+                SignInStatus.Success => RedirectToLocal(returnUrl),
+                _ => View(model).WithModelError("Invalid login attempt.")
+            };
         }
 
-        // GET: /Account/Logout
         [AllowAnonymous]
-        public ActionResult Logout()
+        public async Task<ActionResult> Logout()
         {
-            AuthenticationManager.SignOut(DefaultAuthenticationTypes.ApplicationCookie);
+            await HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
             return RedirectToAction("Index", "Home");
-        }
-
-        private IAuthenticationManager AuthenticationManager
-        {
-            get
-            {
-                return HttpContext.GetOwinContext().Authentication;
-            }
         }
 
         private ActionResult RedirectToLocal(string returnUrl)
         {
-            if (Url.IsLocalUrl(returnUrl))
+            return Url.IsLocalUrl(returnUrl) ? (ActionResult)Redirect(returnUrl) : RedirectToAction("Index", "Home");
+        }
+    }
+
+    [Authorize(Roles = "Admin")]
+    public class AdminController : Controller
+    {
+        public ActionResult AdminAction()
+        {
+            return View();
+        }
+    }
+
+    [Authorize(Roles = "OrdinaryUser")]
+    public class UserController : Controller
+    {
+        public ActionResult UserAction()
+        {
+            return View();
+        }
+    }
+
+    [Authorize(Roles = "Admin,OrdinaryUser")]
+    [ApiController]
+    [Route("api")]
+    public class UrlController : ControllerBase
+    {
+        private readonly IUrlRepository _urlRepository;
+
+        public UrlController(IUrlRepository urlRepository)
+        {
+            _urlRepository = urlRepository;
+        }
+
+        [HttpGet("check-unique-url")]
+        public ActionResult CheckUniqueUrl(string originalUrl)
+        {
+            bool isUnique = !_urlRepository.UrlExists(originalUrl);
+            return Ok(new { isUnique });
+        }
+
+        [HttpPost("add-url")]
+        public ActionResult AddUrl([FromBody] UrlModel model)
+        {
+            _urlRepository.AddUrl(model);
+            return Ok();
+        }
+
+        [HttpGet("url-info/{id}")]
+        public ActionResult GetUrlInfo(int id)
+        {
+            var urlInfo = _urlRepository.GetUrlInfo(id);
+
+            return urlInfo != null ? Ok(urlInfo) : NotFound();
+        }
+    }
+
+    public static class ControllerExtensions
+    {
+        public static ActionResult WithModelError(this ActionResult result, string errorMessage)
+        {
+            if (result is ViewResult viewResult)
             {
-                return Redirect(returnUrl);
+                viewResult.ModelState.AddModelError(string.Empty, errorMessage);
             }
-            return RedirectToAction("Index", "Home");
+            return result;
         }
     }
 }

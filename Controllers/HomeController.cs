@@ -1,32 +1,58 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using System.Diagnostics;
-using Url_Shortener.Models;
+﻿using Url_Shortener.Models;
 
-namespace Url_Shortener.Controllers
+[ApiController]
+[Route("api")]
+public class UrlController : ControllerBase
 {
-    public class HomeController : Controller
+    private readonly IUrlRepository _urlRepository;
+
+    public UrlController(IUrlRepository urlRepository)
     {
-        private readonly ILogger<HomeController> _logger;
+        _urlRepository = urlRepository;
+    }
 
-        public HomeController(ILogger<HomeController> logger)
-        {
-            _logger = logger;
-        }
+    [HttpGet("check-unique-url")]
+    public IActionResult CheckUniqueUrl(string originalUrl)
+    {
+        bool isUnique = !_urlRepository.UrlExists(originalUrl);
+        return Ok(new { isUnique });
+    }
 
-        public IActionResult Index()
-        {
-            return View();
-        }
+    [HttpPost("add-url")]
+    public IActionResult AddUrl([FromBody] UrlModel model)
+    {
+        _urlRepository.AddUrl(model);
+        return Ok();
+    }
+}
 
-        public IActionResult Privacy()
-        {
-            return View();
-        }
+[ApiController]
+[Route("[controller]")]
+public class HomeController : ControllerBase
+{
+    private readonly ILogger<HomeController> _logger;
 
-        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-        public IActionResult Error()
-        {
-            return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
-        }
+    public HomeController(ILogger<HomeController> logger)
+    {
+        _logger = logger;
+    }
+
+    [HttpGet]
+    public IActionResult Index()
+    {
+        return View();
+    }
+
+    [HttpGet("privacy")]
+    public IActionResult Privacy()
+    {
+        return View();
+    }
+
+    [HttpGet("error")]
+    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    public IActionResult Error()
+    {
+        return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
     }
 }
